@@ -1,0 +1,763 @@
+<!-- The Algae Database Landscape
+ Project by: Vanessa Graf
+ Created as Bachelor Thesis Project for
+ B.Sc. Biology at the University of Salzburg
+ Supervised by: Prof. Dr. Markus Wiederstein
+ August 2026
+ 
+ Description: The Algae Database Landscape is an interactive 
+ visualization of algae databases, the subjects they study, and
+ the data products they offer to users. It shows a simplified 
+ version of the data journey phycological data goes through, from
+ the natural environment all the way to the finished data products.
+ 
+ Document Outline (rough)
+ BASICS - html and js info, head
+ CSS - style information 
+ NAVIGATION BAR - category selection and clear all filters
+ DB POPUP LAYOUT - defines what to show in the database pop-up panel 
+ INFO PANELS - what the panels that are always visible show 
+ FILE SELECTION - error message when it cannot load the excel file automatically 
+ JS SETUP - prepare basics for js to run properly
+ JS FUNCTIONS - list of all the functions needed 
+ RENDER - have the script run and visualize the data  -->
+
+<!-- BASICS -->
+ <!doctype html>
+<html lang="en">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Algae Database Landscape</title>
+<!-- js should be able to read my .xlsx file -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<!-- CSS -->
+<style>
+:root{
+  --bg:#f4f6f3;--ink:#17201d;--muted:#6d7772;--border:#dce3df;
+  --green:#176b5b;--green-soft:#dcebe6;--orange:#9a5c25;--orange-soft:#efe3d6;
+  --subject:#dcebe6;--product:#efe7d9;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg)}
+body{overflow:hidden}
+button{font:inherit}
+#app{height:100vh;display:grid;grid-template-rows:auto 1fr}
+header{
+  background:#fff;border-bottom:1px solid var(--border);padding:11px 16px;
+  display:flex;gap:18px;align-items:center;z-index:10;min-height:70px;
+}
+.title{min-width:230px}.title h1{font-size:18px;margin:0 0 2px}.title p{font-size:11px;color:var(--muted);margin:0}
+.controls{display:flex;gap:13px;align-items:center;flex-wrap:wrap;min-width:0}
+.group{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.group-label{
+  font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800;margin-right:2px
+}
+button.filter{
+  border:1px solid #cfd8d3;background:#fff;color:#35413c;border-radius:999px;padding:5px 8px;
+  font-size:9px;cursor:pointer;transition:.15s
+}
+button.filter.clear-all.active{
+  background:var(--green);
+  border-color:var(--green);
+  color:#fff;
+}
+button.filter:hover:not(:disabled){border-color:#87958e;transform:translateY(-1px)}
+button.filter.active.primary{background:var(--green);border-color:var(--green);color:#fff}
+button.filter.active.secondary{background:var(--orange);border-color:var(--orange);color:#fff}
+button.filter:disabled{opacity:.28;cursor:not-allowed;background:#f5f6f5}
+#main{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 285px;overflow:hidden}
+#networkPane{min-width:0;min-height:0;overflow:auto;background:var(--bg);border-right:1px solid var(--border)}
+#canvas{position:relative;min-width:900px;min-height:1000px;padding:0}
+#network{display:block;width:100%;height:auto}
+#side{
+  min-height:0;overflow:auto;background:rgba(255,255,255,.96);padding:14px 13px;
+  position:relative;z-index:5
+}
+.side-card{
+  background:#fff;border:1px solid var(--border);border-radius:12px;padding:11px 12px;
+  box-shadow:0 6px 20px rgba(24,34,29,.05);margin-bottom:10px
+}
+#infoPanel{
+  background:#eef6f2;border:1.5px solid #8db9ab;
+  box-shadow:0 8px 24px rgba(23,107,91,.13)
+}
+#infoPanel .panel-head h2{color:#145c4e}
+#infoPanel .type-label{color:#176b5b}
+.side-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;margin-bottom:7px}
+.side-copy{font-size:10.5px;line-height:1.48;color:#45514c}
+.legend-row{display:flex;align-items:center;gap:7px;margin:5px 0;font-size:10px}
+.swatch{width:20px;height:11px;border-radius:4px;border:1px solid #aeb8b3;flex:none}
+.swatch.subject{background:var(--subject)}.swatch.db{background:#fff}.swatch.product{background:var(--product)}
+.line-swatch{width:22px;border-top:2px dashed #7e8a84;flex:none}
+.line-swatch.focus{border-top:3px solid #17201d}
+.accent-swatch{width:20px;height:10px;border-radius:3px;display:flex;overflow:hidden;border:1px solid #c5cfca;flex:none}
+.accent-swatch span{flex:1}.accent-swatch .p{background:var(--green)}.accent-swatch .s{background:var(--orange)}
+#infoPanel{display:none}
+.panel-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.panel-head h2{font-size:17px;margin:1px 0 0;line-height:1.15}
+.close{width:27px;height:27px;padding:0;border:0;background:#eef1ef;border-radius:7px;font-size:17px;cursor:pointer}
+.type-label{font-size:8.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:800}
+.meta dt{font-size:8.5px;text-transform:uppercase;letter-spacing:.09em;color:#7a847f;font-weight:800;margin-top:12px}
+.meta dd{margin:4px 0 0;font-size:10.5px;line-height:1.45}
+.meta a{color:var(--green);word-break:break-all}
+.pills{display:flex;gap:4px;flex-wrap:wrap}.pill{background:#eef3f1;border-radius:999px;padding:3px 6px;font-size:8.5px}
+.path-summary{margin-top:11px;padding:9px;background:#f3f6f4;border-radius:9px;font-size:9.5px;line-height:1.45}
+.path-summary strong{color:#17201d}
+.status{font-size:9px;color:var(--muted);line-height:1.4}
+.error{color:#8b3e32}.ok{color:var(--green)}
+.section-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;fill:#7a847f}
+.section-rule{stroke:#e1e7e3;stroke-width:1}
+.node{cursor:pointer}
+.node rect.main{stroke:#aeb8b3;stroke-width:1;transition:opacity .18s,filter .18s,stroke .18s,stroke-width .18s}
+.node:hover rect.main{stroke:#17201d;stroke-width:1.8;filter:drop-shadow(0 4px 7px rgba(0,0,0,.12))}
+.node text{pointer-events:none}
+.subject-node rect.main{fill:var(--subject)}.db-node rect.main{fill:#fff}.product-node rect.main{fill:var(--product)}
+.node.dim{opacity:.13}.node.related{opacity:.48}
+.node.focus{opacity:1}.node.focus rect.main{stroke:#176b5b;stroke-width:2.3;filter:drop-shadow(0 0 7px rgba(23,107,91,.20))}
+.node.focus.secondary-focus rect.main{stroke:#9a5c25}
+.node.related rect.main{stroke:#176b5b;stroke-width:1.8}
+.node.related.secondary-related rect.main{stroke:#9a5c25}
+.node.related.subject-related rect.main{stroke:#6f988d}
+.node.related.product-related rect.main{stroke:#a58461}
+.node .accent{opacity:.9}
+.edge{
+  fill:none;stroke:#929d98;stroke-width:1.1;stroke-dasharray:5 7;animation:flow 3s linear infinite;
+  opacity:.22;transition:opacity .18s,stroke .18s,stroke-width .18s
+}
+.edge.subject{stroke:#6f988d}.edge.product{stroke:#a58461}
+.edge.dim{opacity:.035}.edge.match{opacity:.78;stroke-width:1.7}
+.edge.match-primary{stroke:#176b5b}.edge.match-secondary{stroke:#9a5c25}.edge.match-both{stroke:#4d5a55}
+.edge.path{opacity:.96;stroke:#17201d;stroke-width:2.7;stroke-dasharray:6 5}
+@keyframes flow{to{stroke-dashoffset:-48}}
+#tooltip{
+  position:fixed;display:none;pointer-events:none;background:#17201d;color:#fff;padding:5px 7px;border-radius:6px;
+  font-size:10px;z-index:40;max-width:270px;box-shadow:0 6px 20px rgba(0,0,0,.18)
+}
+.load-overlay{
+  position:fixed;inset:0;background:rgba(244,246,243,.94);z-index:100;display:flex;align-items:center;justify-content:center;
+}
+.load-box{background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px;max-width:430px;box-shadow:0 15px 45px rgba(24,34,29,.13)}
+.load-box h2{font-size:18px;margin:0 0 7px}.load-box p{font-size:11px;line-height:1.5;color:#52605a}
+.load-box button{border:1px solid #cfd8d3;background:#fff;border-radius:999px;padding:7px 11px;font-size:10px;cursor:pointer}
+@media(max-width:900px){
+  #main{grid-template-columns:1fr}.side{display:none}
+  header{align-items:flex-start;flex-direction:column}
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+<header>
+  <div class="title">
+    <h1>The Algae Database Landscape</h1>
+    <p>An interactive visualization of algae databases, their research subjects, and finished data products.</p></br>
+    <a href="https://vanessagraf.at" target="_blank"><p>&copy; Vanessa Graf 2026</p></a>
+  </div>
+  <!-- NAVIGATION BAR -->
+  <div class="controls">
+    <div class="group" id="primaryControls"><span class="group-label">Primary</span></div>
+    <div class="group" id="secondaryControls"><span class="group-label">Secondary</span></div>
+    <button class="filter clear-all" id="clearAllFilters">Clear all filters</button>
+  </div>
+</header>
+
+<div id="main">
+  <!-- the main section is separated into a large area for the network visualization on the left (networkPane), and a smaller section
+   for information, about, pop-ups, etc. to the right (side)-->
+  <section id="networkPane">
+    <div id="canvas"><svg id="network" aria-label="Interactive algae database network"></svg></div>
+  </section>
+
+  <aside id="side">
+    <!-- DB POPUP LAYOUT -->
+    <div class="side-card" id="infoPanel">
+      <div class="panel-head">
+        <div><div class="type-label" id="panelType"></div><h2 id="panelTitle"></h2></div>
+        <button class="close" id="closePanel" aria-label="Close">×</button>
+      </div>
+      <dl class="meta">
+        <dt>Description</dt><dd id="panelDescription"></dd>
+        <dt id="categoryLabel">Categories</dt><dd id="panelCategories"></dd>
+        <dt id="doiLabel">DOI</dt><dd id="panelDoi"></dd>
+        <dt id="websiteLabel">Website</dt><dd id="panelWebsite"></dd>
+      </dl>
+      <div class="path-summary" id="pathSummary"></div>
+    </div>
+
+    <!-- INFO PANELS - a few panels that are always visible-->
+    <div class="side-card">
+      <div class="side-title">Legend</div>
+      <div class="legend-row"><span class="swatch subject"></span> Subject</div>
+      <div class="legend-row"><span class="swatch db"></span> Database</div>
+      <div class="legend-row"><span class="swatch product"></span> Data product</div>
+      <div class="legend-row"><span class="line-swatch"></span> Relationship</div>
+      <div class="legend-row"><span class="accent-swatch"><span class="p"></span><span class="s"></span></span> Primary / secondary category</div>
+    </div>
+
+    <div class="side-card">
+      <div class="side-title">How to read it</div>
+      <div class="side-copy">
+        Click a <b>PRIMARY</b> category to highlight databases whose main purpose is the selected category.
+        Additionally, you can select one or more <b>SECONDARY</b> categories.
+        <br><br>
+        Click any subject, database, or data product to highlight its connected network.
+        Other connected subjects/products remain visible, but less intensely.
+        <br><br>
+        Click anywhere in the network or <b>Clear all filters</b> to return to the normal view.
+      </div>
+    </div>
+
+    <div class="side-card">
+      <div class="side-title">Data source</div>
+      <div id="status" class="status">Loading algaedata.xlsx…</div>
+    </div>
+  </aside>
+</div>
+</div>
+
+<!-- create a container for the hovering tooltip later (see js section) -->
+<div id="tooltip"></div>
+
+<!-- FILE SELECTION error message -->
+<div class="load-overlay" id="loadOverlay">
+  <div class="load-box">
+    <h2>Loading the Excel data…</h2>
+    <p id="loadMessage">Reading <b>algaedata.xlsx</b>. The HTML does not contain a copy of the database data.</p>
+    <button id="chooseFile" style="display:none">Choose Excel file</button>
+  </div>
+</div>
+<input id="fileInput" type="file" accept=".xlsx,.xls" style="display:none">
+
+<!-- Now for the js section - funcationalities, visualization, interaction, etc. -->
+<script>
+// JS SETUP 
+const EXCEL_FILE="algaedata.xlsx";
+const svg=document.getElementById("network");
+const canvas=document.getElementById("canvas");
+const NS="http://www.w3.org/2000/svg";
+// set up data arrays to be filled with data from the excel file 
+let DATA={databases:[],categories:[],db_categories:[],dataproducts:[],db_dataproducts:[],subjects:[],db_subjects:[]};
+/* set up variables for relations between data points
+dbCats = databases + categories
+dbDps = databases + data producs
+dbSubs = databases + subjects 
+catById = objects for categories */
+let dbCats=[],dbDps=[],dbSubs=[],catById={};
+// set initial mode to null 
+let selectedPrimary=null;
+let selectedSecondary=new Set();
+let selection=null;
+let LATEST_LAYOUT=null;
+
+// JS FUNCTIONS 
+// create new svg element 
+function el(tag,attrs={},parent=svg){
+  const n=document.createElementNS(NS,tag);
+  for(const [k,v] of Object.entries(attrs)) n.setAttribute(k,v);
+  parent.appendChild(n); return n;
+}
+// special characters safety mode - allows the usage of special characters without breaking the code 
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+// clean up excel sheet in case there are some extra spaces, etc. 
+function clean(v){return String(v??"").trim();}
+// access rows from the excel file 
+function sheetRows(workbook,name){
+  const ws=workbook.Sheets[name];
+  if(!ws) return [];
+  return XLSX.utils.sheet_to_json(ws,{defval:""});
+}
+// read the excel file and feed data in DATA 
+// note to self: adjust this if you change the excel structure
+function normalize(workbook){
+  const dbs=sheetRows(workbook,"databases").map(r=>({
+    database_id:clean(r.database_id),name:clean(r.name),description:clean(r.description),DOI:clean(r.DOI),website:clean(r.website)
+  })).filter(r=>r.database_id);
+  const cats=sheetRows(workbook,"categories").map(r=>({
+    category_id:clean(r.category_id),name:clean(r.name),description:clean(r.description)
+  })).filter(r=>r.category_id);
+  const dcat=sheetRows(workbook,"db_categories").map(r=>({
+    database_id:clean(r.database_id),category_id:clean(r.category_id),description:clean(r.description),role:clean(r.role).toLowerCase()
+  })).filter(r=>r.database_id&&r.category_id);
+  const dps=sheetRows(workbook,"dataproducts").map(r=>({
+    dp_id:clean(r.dp_id),name:clean(r.name)||clean(r.type),tag:clean(r.tag)||clean(r.type),description:clean(r.description)
+  })).filter(r=>r.dp_id);
+  const ddp=sheetRows(workbook,"db_dataproducts").map(r=>({
+    database_id:clean(r.database_id),dp_id:clean(r.dp_id),tag:clean(r.tag)
+  })).filter(r=>r.database_id&&r.dp_id);
+  const subs=sheetRows(workbook,"subjects").map(r=>({
+    subject_id:clean(r.subject_id),name:clean(r.name),type:clean(r.type),description:clean(r.description)
+  })).filter(r=>r.subject_id);
+  const dsub=sheetRows(workbook,"db_subjects").map(r=>({
+    database_id:clean(r.database_id),subject_id:clean(r.subject_id)
+  })).filter(r=>r.database_id&&r.subject_id);
+  return {databases:dbs,categories:cats,db_categories:dcat,dataproducts:dps,db_dataproducts:ddp,subjects:subs,db_subjects:dsub};
+}
+// read the excel file and feed the data in the relation variables defined above
+function initIndexes(){
+  dbCats=DATA.db_categories||[]; dbDps=DATA.db_dataproducts||[]; dbSubs=DATA.db_subjects||[];
+  catById=Object.fromEntries((DATA.categories||[]).map(x=>[x.category_id,x]));
+}
+// check if there are databases using the database
+function categoryHasDatabase(catId){return dbCats.some(x=>x.category_id===catId);}
+// check whethere a category is primary or secondary 
+function filterStateForDb(id){
+  const rows=dbCats.filter(x=>x.database_id===id);
+  const primary=!!selectedPrimary && rows.some(x=>x.category_id===selectedPrimary&&x.role==="primary");
+  const secondary=[...selectedSecondary].length
+    ? [...selectedSecondary].every(cid=>rows.some(x=>x.category_id===cid&&x.role==="secondary"))
+    : false;
+
+  // highlighted databases must match the category selection exactly 
+  const match = (!selectedPrimary || primary) &&
+                ([...selectedSecondary].length===0 || secondary);
+  return {primary,secondary,match};
+}
+// check whether any category is selected currently 
+function activeFilter(){return !!selectedPrimary || selectedSecondary.size>0;}
+// which databases should be selected based on filter selection 
+function filteredDbs(){
+  if(!activeFilter()) return new Set(DATA.databases.map(d=>d.database_id));
+  return new Set(DATA.databases.filter(d=>filterStateForDb(d.database_id).match).map(d=>d.database_id));
+}
+// check which other nodes are connected to current selection, for each type (database, subject, data product)
+function connected(type,id){
+  if(type==="database"){
+    return {
+      dbs:new Set([id]),
+      subjects:new Set(dbSubs.filter(x=>x.database_id===id).map(x=>x.subject_id)),
+      products:new Set(dbDps.filter(x=>x.database_id===id).map(x=>x.dp_id))
+    };
+  }
+  if(type==="subject"){
+    const dbs=dbSubs.filter(x=>x.subject_id===id).map(x=>x.database_id);
+    return {
+      dbs:new Set(dbs),
+      subjects:new Set([id]),
+      products:new Set(dbDps.filter(x=>dbs.includes(x.database_id)).map(x=>x.dp_id))
+    };
+  }
+  const dbs=dbDps.filter(x=>x.dp_id===id).map(x=>x.database_id);
+  return {
+    dbs:new Set(dbs),
+    subjects:new Set(dbSubs.filter(x=>dbs.includes(x.database_id)).map(x=>x.subject_id)),
+    products:new Set([id])
+  };
+}
+// set the selection back to null 
+function clearSelection(){
+  selection=null;
+  document.getElementById("infoPanel").style.display="none";
+  render();
+}
+// set what happens when a node is selected (show connections)
+function select(type,id,obj){
+  selection={type,id,paths:connected(type,id)};
+  updateButtons();
+  // Selecting a database also selects its category assignments in the controls.
+  if(type==="database"){
+    const rows=dbCats.filter(x=>x.database_id===id);
+    const p=rows.find(x=>x.role==="primary");
+    selectedPrimary=p?.category_id || null;
+    selectedSecondary=new Set(rows.filter(x=>x.role==="secondary").map(x=>x.category_id));
+    updateButtons();
+  }
+
+  openPanel(type,obj,selection.paths);
+  render();
+}
+// make the filter buttons (categories), separated by primary and secondary 
+function makeButtons(){
+  const p=document.getElementById("primaryControls"),s=document.getElementById("secondaryControls");
+  (DATA.categories||[]).forEach(c=>{
+    const has=categoryHasDatabase(c.category_id);
+    const pb=document.createElement("button");
+    pb.className="filter primary";pb.textContent=c.name;pb.dataset.id=c.category_id;pb.disabled=!has;
+    pb.title=has?c.name:"No database is associated with this category";
+    pb.onclick=()=>{
+      selectedPrimary=selectedPrimary===c.category_id?null:c.category_id;
+      selection=null;document.getElementById("infoPanel").style.display="none";updateButtons();render();
+    };
+    p.appendChild(pb);
+
+    const sb=document.createElement("button");
+    sb.className="filter secondary";sb.textContent=c.name;sb.dataset.id=c.category_id;sb.disabled=!has;
+    sb.title=has?c.name:"No database is associated with this category";
+    sb.onclick=()=>{
+      if(selectedSecondary.has(c.category_id)) selectedSecondary.delete(c.category_id);
+      else selectedSecondary.add(c.category_id);
+      selection=null;document.getElementById("infoPanel").style.display="none";updateButtons();render();
+    };
+    s.appendChild(sb);
+  });
+}
+// buttons should show what is selected - set to active 
+function updateButtons(){
+  document.querySelectorAll("#primaryControls button").forEach(b=>
+    b.classList.toggle("active",b.dataset.id===selectedPrimary)
+  );
+
+  document.querySelectorAll("#secondaryControls button").forEach(b=>
+    b.classList.toggle("active",selectedSecondary.has(b.dataset.id))
+  );
+
+  document.getElementById("clearAllFilters").classList.toggle(
+    "active",
+    activeFilter() || selection !== null
+  );
+}
+// set how the visualization should look like in terms of layout - what goes where? 
+function layout(){
+  const W=Math.max(canvas.clientWidth,900), left=35, usable=W-70;
+  const gap=14;
+  // how wide the boxes should be
+  const subjectW=152,dbW=172,productW=154;
+  function colsFor(boxW,maxCols){return Math.max(4,Math.min(maxCols,Math.floor((usable+gap)/(boxW+gap))));}
+  const sc=colsFor(subjectW,8), dc=colsFor(dbW,7), pc=colsFor(productW,7);
+  // define the grid of boxes 
+  function grid(items,cols,y,w,h,rowGap=10){
+    const total=cols*w+(cols-1)*gap;
+    const start=left+Math.max(0,(usable-total)/2);
+    const out={};
+    items.forEach((it,i)=>{
+      const r=Math.floor(i/cols),c=i%cols,x=start+c*(w+gap),yy=y+r*(h+rowGap);
+      out[it.id]={x,y:yy,w,h,cx:x+w/2,cy:yy+h/2};
+    });
+    return out;
+  }
+  // where do the subjects begin 
+  const sy=50;
+  // how much space do they need, depending on how many there are
+  const sr=Math.ceil(DATA.subjects.length/sc);
+  // where do the databases begin - adjust the distance to the next "section" with that last number (currently +60)
+  const dy=sy+sr*34+(sr-1)*12+60;
+  // how much space do they need, depending on how many there are
+  const dr=Math.ceil(DATA.databases.length/dc);
+  // where do the data products begin - adjust the distance to the next "section" with that last number (currently +60)
+  const py=dy+dr*40+(dr-1)*12+60;
+  // how much space do they need, depending on how many there are
+  const pr=Math.ceil(DATA.dataproducts.length/pc);
+  const H=py+pr*58+80;
+  // dimensions of the boxes 
+  const L={
+    subjects:grid(DATA.subjects.map(x=>({id:x.subject_id})),sc,sy,subjectW,34,12),
+    dbs:grid(DATA.databases.map(x=>({id:x.database_id})),dc,dy,dbW,40,12),
+    dps:grid(DATA.dataproducts.map(x=>({id:x.dp_id})),pc,py,productW,34,12),
+    W,H,dy,py
+  };
+  canvas.style.minHeight=H+"px";
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  svg.setAttribute("width",W);svg.setAttribute("height",H);
+  return L;
+}
+// automatically renders genus and species names in cursive 
+function speciesSegments(name){
+  const words=clean(name).split(/\s+/);
+  if(words.length<2) return words.map(w=>({text:w,italic:false}));
+  const first=words[0],second=words[1];
+  const blocked=new Set(["all","diatoms","dinoflagellates","cyanobacteria","freshwater","hab-forming","phycobilin","phaeophyceae","rhodophyceae","macroalgae"]);
+  if(blocked.has(first.toLowerCase()) || second.toLowerCase()==="sp." || first==="Mesodinium") {
+    return words.map(w=>({text:w,italic:false}));
+  }
+  const parts=[];
+  let italicCount=0;
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
+    if(i===0){parts.push({text:w,italic:true});italicCount++;continue;}
+    if(italicCount>0 && /^[a-zà-öø-ÿ][a-zà-öø-ÿ-]*$/i.test(w) && !["strain","substr."].includes(w.toLowerCase()) && !/^[A-Z]{2,}\d/.test(w)){
+      parts.push({text:w,italic:true});italicCount++;
+    }else parts.push({text:w,italic:false});
+  }
+  if(italicCount<2) return words.map(w=>({text:w,italic:false}));
+  return parts;
+}
+// make sure the text on the nodes stays within the node box (calculate for each text and box)
+  function wrapText(parent, segments, width, height, baseSize = 10, maxLines = 3) { 
+    const text = el("text", {
+      "text-anchor": "middle",
+      "font-size": baseSize,
+      "font-weight": "600",
+      "dominant-baseline": "middle"
+    }, parent);
+    const tokens = [];
+    segments.forEach(seg => {
+      seg.text.split(/\s+/).filter(Boolean).forEach(word => {
+        tokens.push({word, italic: seg.italic});
+      });
+    });
+    // automatically adjust fonst size to fit in the box 
+    for (let fs = baseSize; fs >= 7; fs -= .5) {
+      while (text.firstChild) text.removeChild(text.firstChild);
+      text.setAttribute("font-size", fs);
+      const lines = [[]];
+      let approx = 0;
+      const charW = fs * .54;
+      tokens.forEach(tok => {
+        const w = (tok.word.length + 1) * charW;
+        if (lines[lines.length - 1].length && approx + w > width - 16) {
+          lines.push([]);
+          approx = 0;
+        }
+        lines[lines.length - 1].push(tok);
+        approx += w;
+      });
+      if (lines.length <= maxLines) {
+        const lineH = fs * 1.18;
+        const total = lines.length * lineH;
+        if (total <= height - 10) {
+          const centerY = height / 2;
+          lines.forEach((line, li) => {
+            const tspan = document.createElementNS(NS, "tspan");
+            tspan.setAttribute("x", width / 2);
+            const firstY = centerY - total / 2 + lineH / 2;
+            tspan.setAttribute(
+              "y",
+              firstY + li * lineH
+            );
+            line.forEach((tok, i) => {
+              const wspan = document.createElementNS(NS, "tspan");
+              wspan.textContent = (i ? " " : "") + tok.word;
+              if (tok.italic) {
+                wspan.setAttribute("font-style", "italic");
+              }
+              tspan.appendChild(wspan);
+            });
+            text.appendChild(tspan);
+          });
+          return text;
+        }
+      }
+    }
+    while (text.firstChild) text.removeChild(text.firstChild);
+    const t = document.createElementNS(NS, "tspan");
+    t.setAttribute("x", width / 2);
+    t.setAttribute("y", height / 2);
+    t.setAttribute("dominant-baseline", "middle");
+    t.textContent = tokens.map(x => x.word).join(" ");
+    text.appendChild(t);
+    return text;
+  }
+// show colored accents indicating primary or secondary category on database node 
+function accentForDb(g,state){
+  const x=4,y=4,w=state.primary&&state.secondary?164:164,h=4;
+  if(state.primary&&state.secondary){
+    const a=el("rect",{x,y,width:w/2,height:h,rx:2,class:"accent"},g);
+    a.setAttribute("fill","var(--green)");
+    a.setAttribute("fill-opacity","0.5");
+    const b=el("rect",{x:x+w/2,y,width:w/2,height:h,rx:2,class:"accent"},g);
+    b.setAttribute("fill","var(--orange)");
+    b.setAttribute("fill-opacity","0.5");
+  }else if(state.primary||state.secondary){
+    const a=el("rect",{x,y,width:w,height:h,rx:2,class:"accent"},g);
+    a.setAttribute("fill",state.primary?"var(--green)":"var(--orange)");
+    a.setAttribute("fill-opacity","0.5");
+  }
+}
+// open the info popup or info panel on the right side 
+function openPanel(type,obj,paths){
+  const panel=document.getElementById("infoPanel");panel.style.display="block";
+  document.getElementById("panelType").textContent=type;
+  document.getElementById("panelTitle").textContent=obj.name||obj.type||obj.tag||"";
+  document.getElementById("panelDescription").textContent=obj.description||"—";
+  const db=type==="database";
+  ["categoryLabel","panelCategories","doiLabel","panelDoi","websiteLabel","panelWebsite"].forEach(id=>{
+    document.getElementById(id).style.display=db?"":"none";
+  });
+  if(db){
+    const cats=dbCats.filter(x=>x.database_id===obj.database_id);
+    document.getElementById("panelCategories").innerHTML=cats.length
+      ?'<div class="pills">'+cats.map(x=>`<span class="pill">${esc(catById[x.category_id]?.name||x.category_id)} · ${esc(x.role)}</span>`).join("")+"</div>"
+      :"—";
+    const doi=clean(obj.DOI);
+    document.getElementById("panelDoi").innerHTML=(doi && doi.toLowerCase()!=="none")
+      ?`<a href="${esc(doi)}" target="_blank" rel="noopener noreferrer">${esc(doi)}</a>`:"—";
+    const site=clean(obj.website);
+    document.getElementById("panelWebsite").innerHTML=site
+      ?`<a href="${esc(site)}" target="_blank" rel="noopener noreferrer">${esc(site)}</a>`:"—";
+  }
+  const names=id=>DATA.subjects.find(x=>x.subject_id===id)?.name||id;
+  const dpname=id=>DATA.dataproducts.find(x=>x.dp_id===id)?.name||id;
+  let summary="";
+  if(type==="database"){
+    summary=`<strong>Highlighted path</strong><br>${[...paths.subjects].map(names).join(", ")||"No subject link recorded"}<br>↓<br><strong>${esc(obj.name)}</strong><br>↓<br>${[...paths.products].map(dpname).join(", ")||"No data product link recorded"}`;
+  }else if(type==="subject"){
+    summary=`<strong>Connected databases</strong><br>${[...paths.dbs].map(id=>DATA.databases.find(x=>x.database_id===id)?.name||id).join(", ")||"None"}<br><br><strong>Connected data products</strong><br>${[...paths.products].map(dpname).join(", ")||"None"}`;
+  }else{
+    summary=`<strong>Connected databases</strong><br>${[...paths.dbs].map(id=>DATA.databases.find(x=>x.database_id===id)?.name||id).join(", ")||"None"}<br><br><strong>Connected subjects</strong><br>${[...paths.subjects].map(names).join(", ")||"None"}`;
+  }
+  document.getElementById("pathSummary").innerHTML=summary;
+}
+// RENDER 
+// draw the visualization depending on selection 
+function render(){
+  while(svg.firstChild)svg.removeChild(svg.firstChild);
+  const L=layout();LATEST_LAYOUT=L;
+  const bg=el("rect",{x:0,y:0,width:L.W,height:L.H,fill:"transparent"});
+  bg.addEventListener("click",clearSelection);
+  el("text",{x:35,y:21,class:"section-label"}).textContent="SUBJECTS";
+  el("line",{x1:35,y1:27,x2:L.W-35,y2:27,class:"section-rule"});
+  el("text",{x:35,y:L.dy-18,class:"section-label"}).textContent="DATABASES";
+  el("line",{x1:35,y1:L.dy-10,x2:L.W-35,y2:L.dy-10,class:"section-rule"});
+  el("text",{x:35,y:L.py-18,class:"section-label"}).textContent="DATA PRODUCTS";
+  el("line",{x1:35,y1:L.py-10,x2:L.W-35,y2:L.py-10,class:"section-rule"});
+
+  const edges=el("g"),nodes=el("g");
+  const visibleDbs=filteredDbs();
+  const relevantSubjects=new Set(dbSubs.filter(x=>visibleDbs.has(x.database_id)).map(x=>x.subject_id));
+  const relevantProducts=new Set(dbDps.filter(x=>visibleDbs.has(x.database_id)).map(x=>x.dp_id));
+
+  // draw connecting lines
+  function edge(a,b,type,dbid){
+    if(!a||!b)return;
+    const e=el("path",{
+      d:`M ${a.cx} ${a.y+a.h} C ${a.cx} ${(a.y+a.h+b.y)/2}, ${b.cx} ${(a.y+a.h+b.y)/2}, ${b.cx} ${b.y}`,
+      class:"edge "+type
+    },edges);
+    const st=filterStateForDb(dbid);
+    // in different styles, depending on selection 
+    if(selection){
+      if(selection.paths.dbs.has(dbid)){
+        e.classList.add("match");
+        if(st.primary&&st.secondary)e.classList.add("match-both");
+        else if(st.primary)e.classList.add("match-primary");
+        else if(st.secondary)e.classList.add("match-secondary");
+      }else e.classList.add("dim");
+    }else if(activeFilter()){
+      if(st.match){
+        e.classList.add("match");
+        if(st.primary&&st.secondary)e.classList.add("match-both");
+        else if(st.primary)e.classList.add("match-primary");
+        else e.classList.add("match-secondary");
+      }else e.classList.add("dim");
+    }
+  }
+  dbSubs.forEach(r=>edge(L.subjects[r.subject_id],L.dbs[r.database_id],"subject",r.database_id));
+  dbDps.forEach(r=>edge(L.dbs[r.database_id],L.dps[r.dp_id],"product",r.database_id));
+  // draw a box for each subject
+  DATA.subjects.forEach(s=>{
+    const p=L.subjects[s.subject_id];if(!p)return;
+    const g=el("g",{class:"node subject-node",transform:`translate(${p.x},${p.y})`},nodes);
+    const isFocus=selection?.type==="subject"&&selection.id===s.subject_id;
+    const isRelated=selection?.paths.subjects.has(s.subject_id);
+    // in different styles, depending on selection 
+    if(selection){
+      if(isFocus)g.classList.add("focus");
+      else if(isRelated){g.classList.add("related","subject-related");}
+      else g.classList.add("dim");
+    }else if(activeFilter()&&!relevantSubjects.has(s.subject_id))g.classList.add("dim");
+    el("rect",{class:"main",width:p.w,height:p.h,rx:8},g);
+    wrapText(g,speciesSegments(s.name),p.w,p.h,10.2,2);
+    // tooltip gives the description on hover
+    tip(g,s.description||s.name);
+    g.onclick=e=>{e.stopPropagation();select("subject",s.subject_id,s)};
+  });
+// draw a box for each database 
+  DATA.databases.forEach(db=>{
+    const p=L.dbs[db.database_id];if(!p)return;
+    const g=el("g",{class:"node db-node",transform:`translate(${p.x},${p.y})`},nodes);
+    const isFocus=selection?.type==="database"&&selection.id===db.database_id;
+    const isRelated=selection?.paths.dbs.has(db.database_id);
+    // in different styles, depending on selection 
+    if(selection){
+      if(isFocus){
+        g.classList.add("focus");
+        const st=filterStateForDb(db.database_id);
+        if(st.secondary&&!st.primary)g.classList.add("secondary-focus");
+      }else if(isRelated){
+        g.classList.add("related");
+        const st=filterStateForDb(db.database_id);
+        if(st.secondary&&!st.primary)g.classList.add("secondary-related");
+      }else g.classList.add("dim");
+    }else if(activeFilter()&&!visibleDbs.has(db.database_id))g.classList.add("dim");
+    el("rect",{class:"main",width:p.w,height:p.h,rx:9},g);
+    wrapText(g,[{text:db.name,italic:false}],p.w,p.h,10.4,3);
+    const st=filterStateForDb(db.database_id);
+    if(activeFilter()&&st.match)accentForDb(g,st);
+    // tooltip gives the description on hover
+    tip(g,db.description||db.name);
+    g.onclick=e=>{e.stopPropagation();select("database",db.database_id,db)};
+  });
+// draw each data product as a box
+  DATA.dataproducts.forEach(dp=>{
+    const p=L.dps[dp.dp_id];if(!p)return;
+    const g=el("g",{class:"node product-node",transform:`translate(${p.x},${p.y})`},nodes);
+    const isFocus=selection?.type==="product"&&selection.id===dp.dp_id;
+    const isRelated=selection?.paths.products.has(dp.dp_id);
+    // in different styles, depending on selection 
+    if(selection){
+      if(isFocus)g.classList.add("focus");
+      else if(isRelated){g.classList.add("related","product-related");}
+      else g.classList.add("dim");
+    }else if(activeFilter()&&!relevantProducts.has(dp.dp_id))g.classList.add("dim");
+    el("rect",{class:"main",width:p.w,height:p.h,rx:8},g);
+    wrapText(g,[{text:dp.name||dp.tag,italic:false}],p.w,p.h,9.8,2);
+    // tooltip gives the description on hover
+    tip(g,dp.description||dp.name||dp.tag);
+    g.onclick=e=>{e.stopPropagation();select("product",dp.dp_id,dp)};
+  });
+}
+// defines the tooltip included in the section above as a hovering description 
+function tip(g,text){
+  g.onmouseenter=e=>{const t=document.getElementById("tooltip");t.textContent=text;t.style.display="block";moveTip(e)};
+  g.onmousemove=moveTip;
+  g.onmouseleave=()=>document.getElementById("tooltip").style.display="none";
+}
+// makes the tooltip move with the cursor 
+function moveTip(e){
+  const t=document.getElementById("tooltip");t.style.left=e.clientX+12+"px";t.style.top=e.clientY+12+"px";
+}
+// define what happens when you click on the X in the info panel (close panel)
+document.getElementById("closePanel").onclick=clearSelection;
+// define what happens when you click the "clear all filters" button (render null)
+document.getElementById("clearAllFilters").onclick=()=>{
+  selectedPrimary=null;
+  selectedSecondary.clear();
+  selection=null;
+
+  document.getElementById("infoPanel").style.display="none";
+
+  updateButtons();
+  render();
+};
+// load the excel sheet and read the data 
+async function loadWorkbookFromArrayBuffer(buf){
+  if(!window.XLSX) throw new Error("The Excel reader library could not be loaded. An internet connection is required for the SheetJS reader.");
+  const wb=XLSX.read(buf,{type:"array"});
+  DATA=normalize(wb);
+  initIndexes();
+  document.getElementById("status").innerHTML=`Loaded <b>${EXCEL_FILE}</b>: ${DATA.databases.length} databases · ${DATA.subjects.length} subjects · ${DATA.dataproducts.length} data products`;
+  document.getElementById("status").classList.add("ok");
+  document.getElementById("loadOverlay").style.display="none";
+  makeButtons();updateButtons();render();
+}
+// load the excel sheet directly from server and show an error pop-up if it doesn't work (lets you choose your file manually)
+async function loadFromServer(){
+  try{
+    const response=await fetch(EXCEL_FILE,{cache:"no-store"});
+    if(!response.ok) throw new Error(`Could not load ${EXCEL_FILE} (HTTP ${response.status}).`);
+    await loadWorkbookFromArrayBuffer(await response.arrayBuffer());
+  }catch(err){
+    document.getElementById("loadMessage").innerHTML=
+      `<span class="error"><b>Could not load ${EXCEL_FILE} automatically.</b><br>${esc(err.message)}<br><br>
+      This prototype is designed to run from a small local web server so the browser can read the Excel file.</span>`;
+    document.getElementById("chooseFile").style.display="inline-block";
+    document.getElementById("status").textContent="Excel file not loaded.";
+  }
+}
+// let users choose their own file to upload 
+document.getElementById("chooseFile").onclick=()=>document.getElementById("fileInput").click();
+// load the file that was manually chosen 
+document.getElementById("fileInput").addEventListener("change",async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{await loadWorkbookFromArrayBuffer(await f.arrayBuffer());}
+  catch(err){document.getElementById("loadMessage").innerHTML=`<span class="error">${esc(err.message)}</span>`;}
+});
+// make the visualization responsive (for different sizes of devices)
+window.addEventListener("resize",()=>{if(DATA.databases.length)render()});
+// load the visualization from server 
+loadFromServer();
+</script>
+</body>
+</html>
